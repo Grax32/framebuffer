@@ -2,6 +2,12 @@
 const transitionTimeMs = 1000;
 const transitionPauseTimeMs = 250;
 
+enum framebufferClass {
+  active = "framebuffer-active",
+  passive = "framebuffer-passive",
+  transitionStart = "framebuffer-transition-start",
+}
+
 const buffers: HTMLIFrameElement[] = [];
 
 if (window === window.parent) {
@@ -26,8 +32,8 @@ function rewritePageIntoHostPage() {
   frameBuffer0Parent.append(frameBuffer0);
   frameBuffer1Parent.append(frameBuffer1);
 
-  frameBuffer0.className = "frameBuffer otherBuffer";
-  frameBuffer1.className = "frameBuffer otherBuffer";
+  frameBuffer0.className = "frameBuffer";
+  frameBuffer1.className = "frameBuffer";
 
   frameBuffer0.id = "frameBuffer0";
   frameBuffer1.id = "frameBuffer1";
@@ -56,27 +62,46 @@ function rewritePageIntoHostPage() {
     overflow: hidden;
   }
 
-  .activeBuffer {
+  .${framebufferClass.active} {
     opacity: 1;
-    z-index: 0;
-    clip-path: polygon(0% 20%, 60% 20%, 60% 0%, 100% 50%, 60% 100%, 60% 80%, 0% 80%);
-  }
-
-  .otherBuffer {
-    opacity: 0;
     z-index: 1;
-    clip-path: polygon(0% 2%, 6% 2%, 6% 0%, 10% 5%, 6% 1%, 6% 8%, 0% 8%);
-    transition-property: opacity, clip-path;
+    border: 20px solid green;
+  }
+  .${framebufferClass.passive} {
+    opacity: 0;
+    z-index: 0;
+    border: 20px solid blue;
+    transition-property: opacity, border-color;
     transition-duration: ${transitionTimeMs}ms;
-  }  
+  }
+  .${framebufferClass.transitionStart} {
+    opacity: 1;
+    z-index: 2;
+    border: 20px solid red;
+  }
+`;
 
-  `;
+  // .activeBuffer {
+  //   opacity: 1;
+  //   z-index: 0;
+  //   clip-path: polygon(0% 20%, 60% 20%, 60% 0%, 100% 50%, 60% 100%, 60% 80%, 0% 80%);
+  // }
+
+  // .otherBuffer {
+  //   opacity: 0;
+  //   z-index: 1;
+  //   clip-path: polygon(0% 2%, 6% 2%, 6% 0%, 10% 5%, 6% 1%, 6% 8%, 0% 8%);
+  //   transition-property: opacity, clip-path;
+  //   transition-duration: ${transitionTimeMs}ms;
+  // }
+
+  // `;
 
   document.body = body;
 
   const currentScriptUrl = [
-    ...document.head.getElementsByTagName("script")
-  ].filter(v => v.src.endsWith("framebuffer.js"))[0].src;
+    ...document.head.getElementsByTagName("script"),
+  ].filter((v) => v.src.endsWith("framebuffer.js"))[0].src;
 
   if (!currentScriptUrl) {
     throw new Error(
@@ -86,12 +111,12 @@ function rewritePageIntoHostPage() {
 
   // remove everything except the link to this script
   [...document.head.getElementsByTagName("script")]
-    .filter(v => v.src !== currentScriptUrl)
-    .forEach(v => v.remove());
+    .filter((v) => v.src !== currentScriptUrl)
+    .forEach((v) => v.remove());
 
   [...document.head.childNodes]
-    .filter(v => v.nodeName.toLowerCase() !== "script")
-    .forEach(v => v.remove());
+    .filter((v) => v.nodeName.toLowerCase() !== "script")
+    .forEach((v) => v.remove());
 
   document.head.append(style);
 
@@ -99,33 +124,32 @@ function rewritePageIntoHostPage() {
 }
 
 function init() {
-  window.onpopstate = function(this: WindowEventHandlers, ev: PopStateEvent) {
+  window.onpopstate = function (this: WindowEventHandlers, ev: PopStateEvent) {
     loadNewBufferFromHistory(ev);
   };
 
-  buffers.forEach(buffer =>
+  buffers.forEach((buffer) =>
     buffer.addEventListener("load", () => onBufferLoadComplete(buffer))
   );
 
   function onBufferLoadComplete(buffer: HTMLIFrameElement) {
-    const backgroundDocument = window.document;
     const framedDocument = buffer.contentWindow!.document;
     const origin = framedDocument.location.origin;
     document.title = framedDocument.title;
 
-    if (framedDocument.documentElement.style.backgroundColor) {
-      backgroundDocument.documentElement.style.backgroundColor = framedDocument.documentElement.style.backgroundColor;
-    } else {
+    if (!framedDocument.documentElement.style.backgroundColor) {
       framedDocument.documentElement.style.backgroundColor = "white";
     }
 
-    Array.from(framedDocument.getElementsByTagName("a")).forEach(element => {
+    Array.from(framedDocument.getElementsByTagName("a")).forEach((element) => {
       const href = element.href;
 
       if (href && href.startsWith(origin)) {
-        element.addEventListener("click", async function(e) {
+        element.addEventListener("click", async function (e) {
           e.preventDefault();
           loadNewBufferFromUrl(href);
+
+          console.log("loading" + href);
 
           return false;
         });
@@ -137,7 +161,7 @@ function init() {
     window.history.pushState(
       {
         html: framedDocument.documentElement.outerHTML,
-        loadHtmlFromState: true
+        loadHtmlFromState: true,
       },
       framedDocument.title,
       framedDocument.location.href
@@ -147,19 +171,20 @@ function init() {
   }
 
   function doNewBufferAction(callback: (buffer: HTMLIFrameElement) => void) {
-    const newBuffer = buffers.filter(
-      buffer => !buffer.classList.contains("activeBuffer")
-    )[0] || buffers[0];
+    const newBuffer =
+      buffers.filter(
+        (buffer) => !buffer.classList.contains("activeBuffer")
+      )[0] || buffers[0];
 
     callback(newBuffer);
   }
 
   function loadNewBufferFromUrl(path: string) {
-    doNewBufferAction(v => (v.src = path));
+    doNewBufferAction((v) => (v.src = path));
   }
 
   function loadNewBufferFromHistory(ev: PopStateEvent) {
-    doNewBufferAction(buffer => {
+    doNewBufferAction((buffer) => {
       if (ev.state && ev.state.loadHtmlFromState) {
         buffer.innerHTML = ev.state.html;
         transition(buffer);
@@ -167,17 +192,24 @@ function init() {
     });
   }
 
-  function transition(buffer: HTMLIFrameElement) {
-    const otherBuffer = buffers.filter(v => v !== buffer)[0];
+  function transition(bufferToTransitionTo: HTMLIFrameElement) {
+    const bufferToTransitionFrom = buffers.filter(
+      (v) => v !== bufferToTransitionTo
+    )[0];
+
+    bufferToTransitionTo.classList.remove(
+      framebufferClass.passive,
+      framebufferClass.transitionStart
+    );
+    bufferToTransitionTo.classList.add(framebufferClass.active);
+
+    bufferToTransitionFrom.classList.remove(framebufferClass.active);
+   // bufferToTransitionFrom.classList.add(framebufferClass.transitionStart);
+    bufferToTransitionFrom.classList.add(framebufferClass.passive);
 
     // buffer.style.transitionDelay =
     //   transitionTimeMs + transitionPauseTimeMs + "ms";
     // otherBuffer.style.transitionDelay = "0ms";
-
-    buffer.classList.add("activeBuffer", "front");
-    buffer.classList.remove("activeBuffer", "back");
-    otherBuffer.classList.add("back");
-    // otherBuffer.classList.remove("activeBuffer");
   }
 
   loadNewBufferFromUrl(document.URL);
