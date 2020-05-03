@@ -9,13 +9,12 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-const transitionTimeMs = 1000;
+const transitionTimeMs = 5000;
 const transitionPauseTimeMs = 250;
 var framebufferClass;
 (function (framebufferClass) {
     framebufferClass["active"] = "framebuffer-active";
     framebufferClass["passive"] = "framebuffer-passive";
-    framebufferClass["transitionStart"] = "framebuffer-transition-start";
 })(framebufferClass || (framebufferClass = {}));
 const buffers = [];
 if (window === window.parent) {
@@ -60,37 +59,34 @@ function rewritePageIntoHostPage() {
     overflow: hidden;
   }
 
+  @keyframes blurFadeOut {
+    from { filter: blur(0px); opacity: 1; z-index: 10; }
+    50% { filter: blur(15px); opacity: 1; z-index: 10; }
+    99% { filter: blur(0px); opacity: 0; z-index: 10; }
+    to { filter: blur(0px); opacity: 0; z-index: 0; }
+  }
+
+  @keyframes blurFadeIn {
+    from { filter: blur(0px); opacity: 0; }
+    50% { filter: blur(15px); opacity: 0; }
+    99% { filter: blur(0px); opacity: 1; }
+    to { filter: blur(0px); opacity: 1; }
+  }
+
   .${framebufferClass.active} {
     opacity: 1;
     z-index: 1;
-    border: 20px solid green;
+    animation-name: blurFadeIn;
+    animation-duration: 1s;
   }
+
   .${framebufferClass.passive} {
     opacity: 0;
-    z-index: 0;
-    border: 20px solid blue;
-    transition-property: opacity, border-color;
-    transition-duration: ${transitionTimeMs}ms;
-  }
-  .${framebufferClass.transitionStart} {
-    opacity: 1;
-    z-index: 2;
-    border: 20px solid red;
+    animation-name: blurFadeOut;
+    animation-duration: 1s;
   }
 `;
-    // .activeBuffer {
-    //   opacity: 1;
-    //   z-index: 0;
-    //   clip-path: polygon(0% 20%, 60% 20%, 60% 0%, 100% 50%, 60% 100%, 60% 80%, 0% 80%);
-    // }
-    // .otherBuffer {
-    //   opacity: 0;
-    //   z-index: 1;
-    //   clip-path: polygon(0% 2%, 6% 2%, 6% 0%, 10% 5%, 6% 1%, 6% 8%, 0% 8%);
-    //   transition-property: opacity, clip-path;
-    //   transition-duration: ${transitionTimeMs}ms;
-    // }
-    // `;
+    // also consider clip-path animations
     document.body = body;
     const currentScriptUrl = [
         ...document.head.getElementsByTagName("script"),
@@ -143,7 +139,7 @@ function init() {
         transition(buffer);
     }
     function doNewBufferAction(callback) {
-        const newBuffer = buffers.filter((buffer) => !buffer.classList.contains("activeBuffer"))[0] || buffers[0];
+        const newBuffer = buffers.filter(buffer => buffer.classList.contains(framebufferClass.passive))[0] || buffers[0];
         callback(newBuffer);
     }
     function loadNewBufferFromUrl(path) {
@@ -159,14 +155,10 @@ function init() {
     }
     function transition(bufferToTransitionTo) {
         const bufferToTransitionFrom = buffers.filter((v) => v !== bufferToTransitionTo)[0];
-        bufferToTransitionTo.classList.remove(framebufferClass.passive, framebufferClass.transitionStart);
+        bufferToTransitionTo.classList.remove(framebufferClass.passive);
         bufferToTransitionTo.classList.add(framebufferClass.active);
         bufferToTransitionFrom.classList.remove(framebufferClass.active);
-        // bufferToTransitionFrom.classList.add(framebufferClass.transitionStart);
         bufferToTransitionFrom.classList.add(framebufferClass.passive);
-        // buffer.style.transitionDelay =
-        //   transitionTimeMs + transitionPauseTimeMs + "ms";
-        // otherBuffer.style.transitionDelay = "0ms";
     }
     loadNewBufferFromUrl(document.URL);
 }
