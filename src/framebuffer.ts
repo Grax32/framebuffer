@@ -11,45 +11,36 @@ if (window === window.parent) {
 enum framebufferCssClass {
   active = "framebuffer-active",
   passive = "framebuffer-passive",
-  initial = "framebuffer-initial",
+  visible = "visible",
 }
 
 class frameBuffer {
-  private buffers: [HTMLIFrameElement, HTMLIFrameElement] = [
-    document.createElement("iframe"),
-    document.createElement("iframe"),
-  ];
+  private buffers: HTMLIFrameElement[] = [0, 1].map((v) =>
+    this.createFrameBufferElement(v)
+  );
 
-  private buildFrameBufferParent(buffer: HTMLIFrameElement, id: string) {
+  private createFrameBufferElement(id: number): HTMLIFrameElement {
+    const buffer = document.createElement("iframe");
     buffer.className = "frameBuffer";
     buffer.id = "frameBuffer" + id;
-
-    const frameBufferParent = document.createElement("div");
-    frameBufferParent.append(buffer);
-    return frameBufferParent;
+    return buffer;
   }
 
   private rewritePageIntoHostPage() {
     const style = document.createElement("style");
     const body = document.createElement("body");
-
-    body.append(
-      this.buildFrameBufferParent(this.buffers[0], "0"),
-      this.buildFrameBufferParent(this.buffers[1], "1")
-    );
+    body.append(...this.buffers);
+    this.buffers[0].src = document.URL;
 
     style.innerHTML = `
       html,
       body,
       .frameBuffer {
         height: 100vh;
-        width: 100vw;
+        width: 100%;
         margin: 0;
         padding: 0;
         border: 0 none;
-      }
-
-      .frameBuffer {
         position: absolute;
         top: 0;
         left: 0;
@@ -57,27 +48,26 @@ class frameBuffer {
         animation-duration: 600ms;
       }
 
-      .${framebufferCssClass.initial} {
-        animation-duration: 0;
-      }
-
       @keyframes blurFadeOut {
         from { filter: blur(0px); opacity: 1; z-index: 10; }
-        50% { filter: blur(15px); opacity: 1; z-index: 10; }
+        50% { filter: blur(15px); opacity: .7; z-index: 10; }
         99% { filter: blur(0px); opacity: 0; z-index: 10; }
         to { filter: blur(0px); opacity: 0; z-index: 0; }
       }
 
       @keyframes blurFadeIn {
         from { filter: blur(0px); opacity: 0; }
-        50% { filter: blur(15px); opacity: 0; }
+        50% { filter: blur(15px); opacity: .7; }
         99% { filter: blur(0px); opacity: 1; }
         to { filter: blur(0px); opacity: 1; }
       }
 
-      .${framebufferCssClass.active} {
+      .${framebufferCssClass.visible} {
         opacity: 1;
         z-index: 1;
+      }
+
+      .${framebufferCssClass.active} {
         animation-name: blurFadeIn;
       }
 
@@ -88,7 +78,6 @@ class frameBuffer {
     `;
 
     // also consider clip-path animations
-
     document.body = body;
 
     const scriptElements = [...document.head.getElementsByTagName("script")];
@@ -113,6 +102,9 @@ class frameBuffer {
       .forEach((v) => v.remove());
 
     document.head.append(style);
+
+    this.buffers[0].classList.add(framebufferCssClass.visible);
+    this.buffers[1].classList.add(framebufferCssClass.passive);
   }
 
   public initFrameBuffer() {
@@ -125,8 +117,6 @@ class frameBuffer {
     this.buffers.forEach((buffer) => {
       buffer.addEventListener("load", () => this.onBufferLoadComplete(buffer));
     });
-
-    this.loadNewBufferFromUrl(document.URL);
   }
 
   private doNewBufferAction(callback: (buffer: HTMLIFrameElement) => void) {
@@ -148,6 +138,11 @@ class frameBuffer {
   }
 
   private transition(bufferToTransitionTo: HTMLIFrameElement) {
+    this.show(bufferToTransitionTo);
+    bufferToTransitionTo.classList.add(framebufferCssClass.active);
+  }
+
+  private show(bufferToTransitionTo: HTMLIFrameElement) {
     const bufferToTransitionFrom = this.buffers.find(
       (v) => v !== bufferToTransitionTo
     )!;
@@ -155,14 +150,15 @@ class frameBuffer {
     this.removeClasses(bufferToTransitionTo);
     this.removeClasses(bufferToTransitionFrom);
 
-    bufferToTransitionTo.classList.add(framebufferCssClass.active);
+    bufferToTransitionTo.classList.add(framebufferCssClass.visible);
     bufferToTransitionFrom.classList.add(framebufferCssClass.passive);
   }
 
   private removeClasses(buffer: HTMLIFrameElement) {
     buffer.classList.remove(
       framebufferCssClass.active,
-      framebufferCssClass.passive
+      framebufferCssClass.passive,
+      framebufferCssClass.visible
     );
   }
 
@@ -173,7 +169,15 @@ class frameBuffer {
     } catch {
       // failed to retrieve document, redirecting to same document so
       // that error is visible to user
-      location.href = buffer.src;
+      try {
+        location.href = buffer.src;
+      } catch (error) {
+        document.documentElement.innerHTML =
+          "<html><body>An error has occurred navigating to a URL that was already causing an error.  The error is show below <hr/>" +
+          error +
+          "</body></html>";
+        return false;
+      }
       return true;
     }
   }
@@ -188,6 +192,11 @@ class frameBuffer {
     if (this.redirectOnError(buffer)) {
       return;
     }
+
+    this.buffers.forEach((buf) => {
+      buf.style.removeProperty("animationName");
+      buf.style.removeProperty("animationDuration");
+    });
 
     const framedDocument = buffer.contentWindow!.document;
     const origin = framedDocument.location.origin;
@@ -226,6 +235,10 @@ class frameBuffer {
       framedDocument.location.href
     );
 
-    this.transition(buffer);
+    if (buffer.contentWindow!.document.URL === document.URL) {
+      this.show(buffer);
+    } else {
+      this.transition(buffer);
+    }
   }
 }
